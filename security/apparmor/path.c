@@ -36,6 +36,17 @@ static int prepend(char **buffer, int buflen, const char *str, int namelen)
 	return 0;
 }
 
+/* modified from dcache.h */
+static inline bool d_is_negative(const struct dentry *dentry)
+{
+	return (dentry->d_inode == NULL);
+}
+
+static inline bool d_is_positive(const struct dentry *dentry) 
+{
+	return !d_is_negative(dentry);
+}
+
 #define CHROOT_NSCONNECT (PATH_CHROOT_REL | PATH_CHROOT_NSCONNECT)
 
 /* If the path is not connected to the expected root,
