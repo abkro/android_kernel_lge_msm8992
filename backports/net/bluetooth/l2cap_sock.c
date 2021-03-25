@@ -975,6 +975,13 @@ static int l2cap_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 
 	return err;
 }
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0)
+static int backport_l2cap_sock_sendmsg(struct kiocb *iocb,
+				       struct socket *sock,
+				       struct msghdr *msg, size_t len){
+	return l2cap_sock_sendmsg(sock, msg, len);
+}
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0) */
 
 static int l2cap_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 			      size_t len, int flags)
@@ -1036,6 +1043,14 @@ done:
 	release_sock(sk);
 	return err;
 }
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0)
+static int backport_l2cap_sock_recvmsg(struct kiocb *iocb,
+				       struct socket *sock,
+				       struct msghdr *msg, size_t len,
+				       int flags){
+	return l2cap_sock_recvmsg(sock, msg, len, flags);
+}
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(4,1,0) */
 
 /* Kill socket (only if zapped and orphan)
  * Must be called on unlocked socket.
@@ -1291,7 +1306,11 @@ static void l2cap_sock_teardown_cb(struct l2cap_chan *chan, int err)
 
 		if (parent) {
 			bt_accept_unlink(sk);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,15,0)
 			parent->sk_data_ready(parent);
+#else
+			parent->sk_data_ready(parent, 0);
+#endif
 		} else {
 			sk->sk_state_change(sk);
 		}
@@ -1358,8 +1377,13 @@ static void l2cap_sock_ready_cb(struct l2cap_chan *chan)
 	sk->sk_state = BT_CONNECTED;
 	sk->sk_state_change(sk);
 
-	if (parent)
+	if (parent) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,15,0)
 		parent->sk_data_ready(parent);
+#else
+		parent->sk_data_ready(parent, 0);
+#endif
+	}
 
 	release_sock(sk);
 }
@@ -1371,8 +1395,13 @@ static void l2cap_sock_defer_cb(struct l2cap_chan *chan)
 	lock_sock(sk);
 
 	parent = bt_sk(sk)->parent;
-	if (parent)
+	if (parent) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,15,0)
 		parent->sk_data_ready(parent);
+#else
+		parent->sk_data_ready(parent, 0);
+#endif
+	}
 
 	release_sock(sk);
 }
@@ -1604,8 +1633,18 @@ static const struct proto_ops l2cap_sock_ops = {
 	.listen		= l2cap_sock_listen,
 	.accept		= l2cap_sock_accept,
 	.getname	= l2cap_sock_getname,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 	.sendmsg	= l2cap_sock_sendmsg,
+#else
+	.sendmsg = backport_l2cap_sock_sendmsg,
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0)
 	.recvmsg	= l2cap_sock_recvmsg,
+#else
+	.recvmsg = backport_l2cap_sock_recvmsg,
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4,1,0) */
+
 	.poll		= bt_sock_poll,
 	.ioctl		= bt_sock_ioctl,
 	.mmap		= sock_no_mmap,
